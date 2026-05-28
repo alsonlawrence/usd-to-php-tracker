@@ -257,17 +257,24 @@ def save_to_db(config, bank_name, buying, selling):
         "SELECT id FROM ofw_bank_rates WHERE bank_name = %s AND date_recorded = %s",
         (bank_name, today)
     )
-    if cursor.fetchone():
-        cursor.close()
-        connection.close()
-        return
+    existing = cursor.fetchone()
 
-    cursor.execute(
-        """INSERT INTO ofw_bank_rates
-           (bank_name, usd_buying_rate, usd_selling_rate, date_recorded)
-           VALUES (%s, %s, %s, %s)""",
-        (bank_name, buying, selling, today)
-    )
+    if existing:
+        # Update the existing record with the latest rate
+        cursor.execute(
+            """UPDATE ofw_bank_rates
+               SET usd_buying_rate = %s, usd_selling_rate = %s, scraped_at = NOW()
+               WHERE bank_name = %s AND date_recorded = %s""",
+            (buying, selling, bank_name, today)
+        )
+    else:
+        # Insert a new record
+        cursor.execute(
+            """INSERT INTO ofw_bank_rates
+               (bank_name, usd_buying_rate, usd_selling_rate, date_recorded)
+               VALUES (%s, %s, %s, %s)""",
+            (bank_name, buying, selling, today)
+        )
     connection.commit()
     cursor.close()
     connection.close()
