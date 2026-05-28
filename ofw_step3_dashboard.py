@@ -18,21 +18,21 @@ import pandas as pd
 import altair as alt
 from datetime import date
 
-# For local running — loads password from .env file
-# For Streamlit Cloud — loads from st.secrets instead
+# ============================================================
+# LOAD AIVEN PASSWORD
+# On Streamlit Cloud — reads from st.secrets
+# Locally — reads from .env file
+# ============================================================
 try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    AIVEN_PASSWORD = os.getenv("AIVEN_PASSWORD")
-except:
-    AIVEN_PASSWORD = None
-
-# Streamlit Cloud stores secrets differently
-# This checks both .env (local) and st.secrets (cloud)
-if not AIVEN_PASSWORD:
+    # Streamlit Cloud secrets (this runs on the live site)
+    AIVEN_PASSWORD = st.secrets["AIVEN_PASSWORD"]
+except Exception:
+    # Local fallback — reads from .env file
     try:
-        AIVEN_PASSWORD = st.secrets["AIVEN_PASSWORD"]
-    except:
+        from dotenv import load_dotenv
+        load_dotenv()
+        AIVEN_PASSWORD = os.getenv("AIVEN_PASSWORD", "")
+    except Exception:
         AIVEN_PASSWORD = ""
 
 # ============================================================
