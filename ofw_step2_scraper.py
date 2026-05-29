@@ -1,17 +1,15 @@
 # ============================================================
 # OFW FOREX TRACKER - FULL SCRAPER (ALL 6 BANKS)
 # ============================================================
-# WHAT THIS DOES:
-#   Scrapes USD buying and selling rates from 6 PH banks
-#   and saves them to BOTH local MySQL AND Aiven cloud database.
+# Saves to 3 databases:
+#   1. Local MySQL (your PC)
+#   2. Aiven cloud
+#   3. Filess.io cloud
 #
 # HOW TO USE:
-#   1. Update DB_CONFIG_LOCAL password (your local MySQL)
-#   2. Update DB_CONFIG_CLOUD with your Aiven details
+#   1. Update all 3 DB configs below
+#   2. Update .env file with both cloud passwords
 #   3. Run: python ofw_step2_scraper.py
-#
-# ONE-TIME INSTALLS:
-#   pip install requests beautifulsoup4 mysql-connector-python selenium
 # ============================================================
 
 import time
@@ -27,36 +25,43 @@ from selenium.webdriver.common.by       import By
 from selenium.webdriver.support.ui      import WebDriverWait
 from selenium.webdriver.support         import expected_conditions as EC
 
-# Load the .env file to get the Aiven password
+# Load passwords from .env file
 load_dotenv()
-AIVEN_PASSWORD = os.getenv("AIVEN_PASSWORD")
+AIVEN_PASSWORD   = os.getenv("AIVEN_PASSWORD")
+FILESS_PASSWORD  = os.getenv("FILESS_PASSWORD")
+
 
 # ============================================================
-# LOCAL DATABASE — your PC
+# DATABASE CONFIGS
 # ============================================================
-DB_CONFIG_LOCAL = {
+
+# 1. Local MySQL
+DB_LOCAL = {
     "host":     "localhost",
     "user":     "root",
-    "password": "root1234",   # <-- your local MySQL password
+    "password": "root1234",
     "database": "forex_db"
 }
 
-# ============================================================
-# CLOUD DATABASE — Aiven (for live dashboard)
-# ============================================================
-DB_CONFIG_CLOUD = {
+# 2. Aiven cloud
+DB_AIVEN = {
     "host":     "mysql-2dfcc8e4-alsonlawrence-usd-to-php-tracker.c.aivencloud.com",
     "port":     14992,
     "user":     "avnadmin",
-    "password": AIVEN_PASSWORD,   # loaded from .env file
+    "password": AIVEN_PASSWORD,
     "database": "defaultdb",
     "ssl_disabled": False
 }
 
+# 3. Filess.io cloud — update with your Filess details
+DB_FILESS = {
+    "host":     "r6ze70.h.filess.io",        # <-- update this
+    "port":     61002,                       # <-- update if different
+    "user":     "ofw_forex_db_popularten",    # <-- update this
+    "password": FILESS_PASSWORD,
+    "database": "ofw_forex_db_popularten"
+}
 
-# ============================================================
-# SELENIUM SETUP — headless Chrome (no visible window)
-# ============================================================
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -65,6 +70,10 @@ HEADERS = {
     )
 }
 
+
+# ============================================================
+# SELENIUM SETUP
+# ============================================================
 def create_driver():
     options = Options()
     options.add_argument("--headless")
@@ -77,7 +86,7 @@ def create_driver():
 
 
 # ============================================================
-# SCRAPER: BPI
+# SCRAPERS
 # ============================================================
 def scrape_bpi():
     print("Scraping BPI...")
@@ -103,9 +112,6 @@ def scrape_bpi():
         return None, None
 
 
-# ============================================================
-# SCRAPER: China Bank
-# ============================================================
 def scrape_chinabank():
     print("Scraping China Bank...")
     try:
@@ -130,9 +136,6 @@ def scrape_chinabank():
         return None, None
 
 
-# ============================================================
-# SCRAPER: BDO
-# ============================================================
 def scrape_bdo(driver):
     print("Scraping BDO...")
     try:
@@ -158,9 +161,6 @@ def scrape_bdo(driver):
         return None, None
 
 
-# ============================================================
-# SCRAPER: Metrobank
-# ============================================================
 def scrape_metrobank(driver):
     print("Scraping Metrobank...")
     try:
@@ -186,9 +186,6 @@ def scrape_metrobank(driver):
         return None, None
 
 
-# ============================================================
-# SCRAPER: LandBank
-# ============================================================
 def scrape_landbank(driver):
     print("Scraping LandBank...")
     try:
@@ -214,9 +211,6 @@ def scrape_landbank(driver):
         return None, None
 
 
-# ============================================================
-# SCRAPER: PNB
-# ============================================================
 def scrape_pnb(driver):
     print("Scraping PNB...")
     try:
@@ -243,12 +237,9 @@ def scrape_pnb(driver):
 
 
 # ============================================================
-# FUNCTION: Save rate to ONE database config
+# SAVE TO ONE DATABASE
 # ============================================================
 def save_to_db(config, bank_name, buying, selling):
-    if buying is None or selling is None:
-        return
-
     today      = date.today()
     connection = mysql.connector.connect(**config)
     cursor     = connection.cursor()
@@ -260,7 +251,6 @@ def save_to_db(config, bank_name, buying, selling):
     existing = cursor.fetchone()
 
     if existing:
-        # Update the existing record with the latest rate
         cursor.execute(
             """UPDATE ofw_bank_rates
                SET usd_buying_rate = %s, usd_selling_rate = %s, scraped_at = NOW()
@@ -268,61 +258,51 @@ def save_to_db(config, bank_name, buying, selling):
             (buying, selling, bank_name, today)
         )
     else:
-        # Insert a new record
         cursor.execute(
             """INSERT INTO ofw_bank_rates
                (bank_name, usd_buying_rate, usd_selling_rate, date_recorded)
                VALUES (%s, %s, %s, %s)""",
             (bank_name, buying, selling, today)
         )
+
     connection.commit()
     cursor.close()
     connection.close()
 
 
 # ============================================================
-# FUNCTION: Save rate to BOTH local and cloud databases
+# SAVE TO ALL 3 DATABASES
 # ============================================================
 def save_rate(bank_name, buying, selling):
     if buying is None or selling is None:
         print(f"  Skipping {bank_name} — no rate found\n")
         return
 
-    # Save to local MySQL
-    try:
-        save_to_db(DB_CONFIG_LOCAL, bank_name, buying, selling)
-        print(f"  ✓ Saved to local: {bank_name} → ₱{buying} / ₱{selling}")
-    except Exception as e:
-        print(f"  ✗ Local save failed: {e}")
-
-    # Save to Aiven cloud
-    try:
-        save_to_db(DB_CONFIG_CLOUD, bank_name, buying, selling)
-        print(f"  ✓ Saved to cloud: {bank_name} → ₱{buying} / ₱{selling}")
-    except Exception as e:
-        print(f"  ✗ Cloud save failed: {e}")
+    for label, config in [("Local", DB_LOCAL), ("Aiven", DB_AIVEN), ("Filess", DB_FILESS)]:
+        try:
+            save_to_db(config, bank_name, buying, selling)
+            print(f"  ✓ Saved to {label}: {bank_name} → ₱{buying} / ₱{selling}")
+        except Exception as e:
+            print(f"  ✗ {label} save failed: {e}")
 
     print()
 
 
 # ============================================================
-# MAIN PROGRAM
+# MAIN
 # ============================================================
 if __name__ == "__main__":
-
     print("=" * 55)
-    print("OFW Forex Scraper — All 6 Banks")
+    print("OFW Forex Scraper — All 6 Banks → 3 Databases")
     print(f"Date: {date.today()}")
     print("=" * 55)
 
-    # Simple scrapers
     b, s = scrape_bpi()
     save_rate("BPI", b, s)
 
     b, s = scrape_chinabank()
     save_rate("China Bank", b, s)
 
-    # Selenium scrapers
     print("Starting headless Chrome...")
     driver = create_driver()
 
