@@ -38,9 +38,9 @@ except Exception:
 # FILESS DATABASE SETTINGS
 # ============================================================
 DB_CONFIG = {
-    "host":     "YOUR_FILESS_HOST",        # <-- update this
-    "port":     3306,                       # <-- update if different
-    "user":     "YOUR_FILESS_USERNAME",    # <-- update this
+    "host":     "r6ze70.h.filess.io",      
+    "port":     61002,                     
+    "user":     "ofw_forex_db_popularten",    
     "password": FILESS_PASSWORD,
     "database": "ofw_forex_db_popularten"
 }
